@@ -5,3 +5,4 @@ dist
 *.local
 server/.env
 client/.env
+.ci

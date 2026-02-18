@@ -11,7 +11,9 @@
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build --workspace client",
     "start": "npm run start --workspace server",
-    "zero:new": "node scripts/create-zero-instance.mjs"
+    "zero:new": "node scripts/create-zero-instance.mjs",
+    "migrate": "node scripts/ci/run-migrations.mjs",
+    "test": "node --test server/test/integration/todo.integration.test.js"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

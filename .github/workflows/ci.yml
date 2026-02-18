@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      ZERO_API_ENDPOINT: https://zero.tidbapi.com/v1alpha1/instances
+      ZERO_INSTANCE_FILE: .ci/zero-instance.json
+      ZERO_TAG: ci-${{ github.repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect package manager
+        id: pm
+        shell: bash
+        run: |
+          if [[ -f pnpm-lock.yaml ]]; then
+            echo "manager=pnpm" >> "$GITHUB_OUTPUT"
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+            echo "cache_dep=pnpm-lock.yaml" >> "$GITHUB_OUTPUT"
+            echo "install_cmd=pnpm install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "run_cmd=pnpm" >> "$GITHUB_OUTPUT"
+          elif [[ -f yarn.lock ]]; then
+            echo "manager=yarn" >> "$GITHUB_OUTPUT"
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+            echo "cache_dep=yarn.lock" >> "$GITHUB_OUTPUT"
+            echo "install_cmd=yarn install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "run_cmd=yarn" >> "$GITHUB_OUTPUT"
+          else
+            echo "manager=npm" >> "$GITHUB_OUTPUT"
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+            if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+              echo "install_cmd=npm ci" >> "$GITHUB_OUTPUT"
+              echo "cache_dep=package-lock.json" >> "$GITHUB_OUTPUT"
+            else
+              echo "install_cmd=npm install" >> "$GITHUB_OUTPUT"
+              echo "cache_dep=package.json" >> "$GITHUB_OUTPUT"
+            fi
+            echo "run_cmd=npm" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ steps.pm.outputs.cache }}
+          cache-dependency-path: ${{ steps.pm.outputs.cache_dep }}
+
+      - name: Enable corepack for pnpm/yarn
+        if: ${{ steps.pm.outputs.manager != 'npm' }}
+        run: corepack enable
+
+      - name: Restore Zero instance metadata cache
+        id: zero_cache_restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci/zero-instance.json
+          key: zero-instance-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            zero-instance-${{ github.repository }}-
+
+      - name: Get or create Zero instance
+        id: zero
+        run: node scripts/ci/get-or-create-zero-instance.mjs
+        env:
+          ZERO_API_KEY: ${{ secrets.ZERO_API_KEY }}
+
+      - name: Save Zero instance metadata cache
+        if: ${{ steps.zero.outputs.cache_updated == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .ci/zero-instance.json
+          key: zero-instance-${{ github.repository }}-${{ github.run_id }}
+
+      - name: Install dependencies
+        run: ${{ steps.pm.outputs.install_cmd }}
+
+      - name: Check lint script
+        id: lint_check
+        shell: bash
+        run: |
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts.lint ? 0 : 1)"; then
+            echo "has_lint=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lint=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint
+        if: ${{ steps.lint_check.outputs.has_lint == 'true' }}
+        run: ${{ steps.pm.outputs.run_cmd }} run lint
+
+      - name: Create clean database
+        run: node scripts/ci/create-clean-db.mjs
+        env:
+          BASE_CONNECTION_STRING: ${{ steps.zero.outputs.base_connection_string }}
+
+      - name: Run migrations
+        run: ${{ steps.pm.outputs.run_cmd }} run migrate
+
+      - name: Run integration tests
+        run: ${{ steps.pm.outputs.run_cmd }} test
+
+      - name: Drop clean database
+        if: ${{ always() }}
+        run: node scripts/ci/drop-clean-db.mjs
+        env:
+          BASE_CONNECTION_STRING: ${{ steps.zero.outputs.base_connection_string }}
+          CLEAN_DB_NAME: ${{ env.CLEAN_DB_NAME }}
+
+      - name: Comment Zero expiresAt on PR
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          ZERO_EXPIRES_AT: ${{ steps.zero.outputs.expires_at }}
+        with:
+          script: |
+            const marker = '<!-- zero-ci-expires-at -->';
+            const body = `${marker}\nTiDB Cloud Zero expiresAt: \`${process.env.ZERO_EXPIRES_AT || 'unknown'}\``;
+            const issue_number = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number
+            });
+            const existing = comments.find((c) => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body
+              });
+            }
