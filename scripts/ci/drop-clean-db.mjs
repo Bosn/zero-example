@@ -22,7 +22,7 @@ function parseBaseConnection(baseConnectionString) {
 
 async function main() {
   const baseConnectionString = process.env.BASE_CONNECTION_STRING;
-  const dbName = process.env.CLEAN_DB_NAME;
+  const dbName = process.env.CLEAN_DB_NAME || process.env.CI_DB_NAME;
 
   if (!dbName) {
     log("CLEAN_DB_NAME is empty. Skipping drop.");

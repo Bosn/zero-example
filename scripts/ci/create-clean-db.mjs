@@ -45,6 +45,7 @@ async function writeGitHubEnv(values) {
 
 async function main() {
   const baseConnectionString = process.env.BASE_CONNECTION_STRING;
+  const expiresAt = process.env.EXPIRES_AT || "";
   if (!baseConnectionString) {
     throw new Error("BASE_CONNECTION_STRING is required");
   }
@@ -63,11 +64,13 @@ async function main() {
     const databaseUrl = dbUrl.toString();
 
     await writeGitHubEnv({
+      CI_DB_NAME: dbName,
       CLEAN_DB_NAME: dbName,
-      DATABASE_URL: databaseUrl
+      DATABASE_URL: databaseUrl,
+      EXPIRES_AT: expiresAt
     });
 
-    log("Exported CLEAN_DB_NAME and DATABASE_URL to GITHUB_ENV");
+    log("Exported CI_DB_NAME, CLEAN_DB_NAME, DATABASE_URL and EXPIRES_AT to GITHUB_ENV");
   } finally {
     await connection.end();
   }

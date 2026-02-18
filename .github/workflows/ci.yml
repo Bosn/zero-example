@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -105,6 +106,7 @@ jobs:
         run: node scripts/ci/create-clean-db.mjs
         env:
           BASE_CONNECTION_STRING: ${{ steps.zero.outputs.base_connection_string }}
+          EXPIRES_AT: ${{ steps.zero.outputs.expires_at }}
 
       - name: Run migrations
         run: ${{ steps.pm.outputs.run_cmd }} run migrate
@@ -117,17 +119,70 @@ jobs:
         run: node scripts/ci/drop-clean-db.mjs
         env:
           BASE_CONNECTION_STRING: ${{ steps.zero.outputs.base_connection_string }}
+          CI_DB_NAME: ${{ env.CI_DB_NAME }}
           CLEAN_DB_NAME: ${{ env.CLEAN_DB_NAME }}
 
-      - name: Comment Zero expiresAt on PR
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: PR Comment (Success)
+        if: ${{ success() && github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
         env:
-          ZERO_EXPIRES_AT: ${{ steps.zero.outputs.expires_at }}
+          CI_DB_NAME: ${{ env.CI_DB_NAME }}
+          EXPIRES_AT: ${{ env.EXPIRES_AT }}
         with:
           script: |
-            const marker = '<!-- zero-ci-expires-at -->';
-            const body = `${marker}\nTiDB Cloud Zero expiresAt: \`${process.env.ZERO_EXPIRES_AT || 'unknown'}\``;
+            const marker = '<!-- tidb-zero-ci-comment -->';
+            const body = [
+              marker,
+              '## ✅ CI Passed',
+              '',
+              `- 🧪 Database: \`${process.env.CI_DB_NAME || 'unknown'}\``,
+              `- ⏳ Expires At: \`${process.env.EXPIRES_AT || 'unknown'}\``,
+              '',
+              'This PR was validated against a fresh TiDB Cloud Zero database.',
+              'Need debugging? Claim before expiration.'
+            ].join('\n');
+            const issue_number = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number
+            });
+            const existing = comments.find((c) => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body
+              });
+            }
+
+      - name: PR Comment (Failure)
+        if: ${{ failure() && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        env:
+          CI_DB_NAME: ${{ env.CI_DB_NAME }}
+          EXPIRES_AT: ${{ env.EXPIRES_AT }}
+        with:
+          script: |
+            const marker = '<!-- tidb-zero-ci-comment -->';
+            const body = [
+              marker,
+              '## ❌ CI Failed',
+              '',
+              `- 🧪 Database: \`${process.env.CI_DB_NAME || 'unknown'}\``,
+              `- ⏳ Expires At: \`${process.env.EXPIRES_AT || 'unknown'}\``,
+              '',
+              'This PR was validated against a fresh TiDB Cloud Zero database.',
+              'Need debugging? Claim before expiration.'
+            ].join('\n');
             const issue_number = context.payload.pull_request.number;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
