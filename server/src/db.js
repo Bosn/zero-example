@@ -59,10 +59,16 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS todos (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
       title VARCHAR(255) NOT NULL,
+      author VARCHAR(255) NOT NULL,
       completed BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE todos
+    ADD COLUMN IF NOT EXISTS author VARCHAR(255) NOT NULL DEFAULT 'unknown'
   `);
 }
 

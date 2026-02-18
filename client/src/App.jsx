@@ -33,6 +33,7 @@ async function request(path, options = {}) {
 export default function App() {
   const [todos, setTodos] = useState([]);
   const [title, setTitle] = useState("");
+  const [author, setAuthor] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -59,7 +60,8 @@ export default function App() {
   async function onCreate(event) {
     event.preventDefault();
     const nextTitle = title.trim();
-    if (!nextTitle) {
+    const nextAuthor = author.trim();
+    if (!nextTitle || !nextAuthor) {
       return;
     }
 
@@ -68,10 +70,11 @@ export default function App() {
     try {
       const created = await request("/api/todos", {
         method: "POST",
-        body: JSON.stringify({ title: nextTitle })
+        body: JSON.stringify({ title: nextTitle, author: nextAuthor })
       });
       setTodos((previous) => [created, ...previous]);
       setTitle("");
+      setAuthor("");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -116,7 +119,14 @@ export default function App() {
             onChange={(event) => setTitle(event.target.value)}
             disabled={submitting}
           />
-          <button type="submit" disabled={submitting || !title.trim()}>
+          <input
+            aria-label="Author name"
+            placeholder="Author"
+            value={author}
+            onChange={(event) => setAuthor(event.target.value)}
+            disabled={submitting}
+          />
+          <button type="submit" disabled={submitting || !title.trim() || !author.trim()}>
             Add
           </button>
         </form>
@@ -137,7 +147,10 @@ export default function App() {
                     checked={todo.completed}
                     onChange={() => onToggle(todo)}
                   />
-                  <span className={todo.completed ? "done" : ""}>{todo.title}</span>
+                  <span className="todo-content">
+                    <span className={todo.completed ? "done" : ""}>{todo.title}</span>
+                    <span className="todo-author">by {todo.author || "unknown"}</span>
+                  </span>
                 </label>
                 <button
                   type="button"
