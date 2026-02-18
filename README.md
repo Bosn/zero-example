@@ -61,8 +61,8 @@ App URLs:
 ## API routes
 
 - `GET /api/todos`
-- `POST /api/todos` with JSON `{ "title": "Buy milk" }`
-- `PATCH /api/todos/:id` with JSON `{ "completed": true }` or `{ "title": "New title" }`
+- `POST /api/todos` with JSON `{ "title": "Buy milk", "author": "Alice" }`
+- `PATCH /api/todos/:id` with JSON `{ "completed": true }`, `{ "title": "New title" }`, or `{ "author": "Bob" }`
 - `DELETE /api/todos/:id`
 
 ## Notes for TiDB Cloud Zero
@@ -70,7 +70,6 @@ App URLs:
 - TiDB Cloud Zero instances are ephemeral; each instance has an expiration time.
 - This app creates the `todos` table automatically on backend startup.
 - TLS is enabled by default for DB connections (`TIDB_ENABLE_SSL=true` unless explicitly set to `false`).
-
 
 
 

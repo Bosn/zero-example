@@ -33,7 +33,7 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/todos", async (_req, res, next) => {
   try {
     const rows = await execute(
-      "SELECT id, title, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos ORDER BY created_at DESC"
+      "SELECT id, title, author, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos ORDER BY created_at DESC"
     );
     res.json(rows.map((row) => ({ ...row, completed: Boolean(row.completed) })));
   } catch (error) {
@@ -44,17 +44,24 @@ app.get("/api/todos", async (_req, res, next) => {
 app.post("/api/todos", async (req, res, next) => {
   try {
     const title = String(req.body?.title || "").trim();
+    const author = String(req.body?.author || "").trim();
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
+    }
+    if (!author) {
+      return res.status(400).json({ message: "Author is required" });
     }
 
     if (title.length > 255) {
       return res.status(400).json({ message: "Title must be 255 characters or fewer" });
     }
+    if (author.length > 255) {
+      return res.status(400).json({ message: "Author must be 255 characters or fewer" });
+    }
 
-    const result = await execute("INSERT INTO todos (title) VALUES (?)", [title]);
+    const result = await execute("INSERT INTO todos (title, author) VALUES (?, ?)", [title, author]);
     const rows = await execute(
-      "SELECT id, title, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos WHERE id = ?",
+      "SELECT id, title, author, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos WHERE id = ?",
       [result.insertId]
     );
 
@@ -86,6 +93,18 @@ app.patch("/api/todos/:id", async (req, res, next) => {
       values.push(title);
     }
 
+    if (req.body.author !== undefined) {
+      const author = String(req.body.author).trim();
+      if (!author) {
+        return res.status(400).json({ message: "Author cannot be empty" });
+      }
+      if (author.length > 255) {
+        return res.status(400).json({ message: "Author must be 255 characters or fewer" });
+      }
+      updates.push("author = ?");
+      values.push(author);
+    }
+
     if (req.body.completed !== undefined) {
       updates.push("completed = ?");
       values.push(Boolean(req.body.completed));
@@ -101,7 +120,7 @@ app.patch("/api/todos/:id", async (req, res, next) => {
     }
 
     const rows = await execute(
-      "SELECT id, title, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos WHERE id = ?",
+      "SELECT id, title, author, completed, created_at AS createdAt, updated_at AS updatedAt FROM todos WHERE id = ?",
       [id]
     );
 

@@ -28,17 +28,19 @@ test("integration: can read/write todos in clean database", async () => {
     assert.equal(tableRows.length, 1, "todos table should exist after migrations");
 
     const title = `ci-integration-${Date.now()}`;
+    const author = "ci-bot";
     const [insertResult] = await connection.execute(
-      "INSERT INTO todos (title, completed) VALUES (?, ?)",
-      [title, false]
+      "INSERT INTO todos (title, author, completed) VALUES (?, ?, ?)",
+      [title, author, false]
     );
     assert.ok(insertResult.insertId, "insert should return an insertId");
 
-    const [rows] = await connection.execute("SELECT title, completed FROM todos WHERE id = ?", [
+    const [rows] = await connection.execute("SELECT title, author, completed FROM todos WHERE id = ?", [
       insertResult.insertId
     ]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].title, title);
+    assert.equal(rows[0].author, author);
     assert.equal(Boolean(rows[0].completed), false);
 
     const [updateResult] = await connection.execute("UPDATE todos SET completed = ? WHERE id = ?", [
